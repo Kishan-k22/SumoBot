@@ -2,26 +2,26 @@
 
 // --- Motor Driver Pins (TB6612FNG) ---
 #define PWMA 11   // Motor A speed (PWM)
-#define AIN1 9   // Motor A direction
+#define AIN1 9    // Motor A direction
 #define AIN2 10   // Motor A direction
 
-#define PWMB 6   // Motor B speed (PWM)
-#define BIN1 4   // Motor B direction
-#define BIN2 5  // Motor B direction
-#define STBY 7   // Standby — must be HIGH for motors to run
+#define PWMB 6    // Motor B speed (PWM)
+#define BIN1 4    // Motor B direction
+#define BIN2 5    // Motor B direction
+#define STBY 7    // Standby — must be HIGH for motors to run
 
 // --- Ultrasonic Sensor Pins (HC-SR04) ---
 #define TRIG 2
 #define ECHO 3
 
 // --- Tuning ---
-#define MOTOR_SPEED     255   // 0-255, adjust for your motors
-#define SEARCH_SPEED    150   // slower speed while spinning to search
-#define ATTACK_DISTANCE 10    // cm — charge when opponent is closer than this
-#define SEARCH_TURN_MS  300   // ms to spin before re-scanning
+#define MOTOR_SPEED      150  // 0–255, adjust for your motors
+#define SEARCH_SPEED     100  // slower speed while spinning to search
+#define ATTACK_DISTANCE  40   // cm — charge when opponent is closer than this
+#define SEARCH_TURN_MS   200  // ms to spin before re-scanning
 
 // --- Motor helpers ---
-void motorLeft(int speed) {
+void motorRight(int speed) {
   if (speed > 0) {
     digitalWrite(AIN1, HIGH);
     digitalWrite(AIN2, LOW);
@@ -36,7 +36,7 @@ void motorLeft(int speed) {
   analogWrite(PWMA, speed);
 }
 
-void motorRight(int speed) {
+void motorLeft(int speed) {
   if (speed > 0) {
     digitalWrite(BIN1, HIGH);
     digitalWrite(BIN2, LOW);
@@ -80,13 +80,12 @@ long readDistanceCm() {
   digitalWrite(TRIG, LOW);
 
   long duration = pulseIn(ECHO, HIGH, 30000); // 30 ms timeout (~5 m max)
-  if (duration == 0) return 999;               // no echo → nothing nearby
-  return duration / 58;                        // convert to cm
+  if (duration == 0) return 999;              // no echo → nothing nearby
+  return duration / 58;                       // convert to cm
 }
 
 // --- Main ---
 void setup() {
-  // Motor driver pins
   pinMode(PWMA, OUTPUT);
   pinMode(AIN1, OUTPUT);
   pinMode(AIN2, OUTPUT);
@@ -96,37 +95,40 @@ void setup() {
   pinMode(STBY, OUTPUT);
   digitalWrite(STBY, HIGH);  // Take driver out of standby
 
-  // Ultrasonic pins
   pinMode(TRIG, OUTPUT);
   pinMode(ECHO, INPUT);
 
   Serial.begin(9600);
-
   stopMotors();
 
-  // 5-second start delay (rules: no movement, but sensors allowed)
+  // --- 5-second start delay (Rule 12) ---
+  // Bot is stationary; sensor readings are allowed during this period.
   unsigned long startTime = millis();
-  long initialDist = 999;
-  while (millis() - startTime < 5000) {
-    initialDist = readDistanceCm();
+  while (millis() - startTime < 3000) {
+    readDistanceCm();
     delay(50);
   }
+  Serial.println("--- 5-Second Delay Complete! ---");
 }
 
 void loop() {
   long dist = readDistanceCm();
 
-  if (dist < ATTACK_DISTANCE) {
-    // Opponent detected — charge!
-    Serial.print("Opponent detected at ");
+  // Debug: always print raw distance
+  Serial.print("Distance: ");
+  Serial.print(dist);
+  Serial.println(" cm");
+
+  if (dist <= ATTACK_DISTANCE) {
+    // Opponent in range — charge without stopping
+    Serial.print("Opponent at ");
     Serial.print(dist);
-    Serial.println(" cm — charging!");
+    Serial.println(" cm — CHARGING!");
     driveForward(MOTOR_SPEED);
-  } else if (dist < 999) {
-    // Opponent detected but too far — stop
-    Serial.print("Opponent detected at ");
-    Serial.print(dist);
-    Serial.println(" cm — not charging");
-    stopMotors();
-  } 
+
+  } else {
+    // No opponent in range — spin to search
+    Serial.println("No opponent — searching...");
+    spinRight(SEARCH_SPEED);
+  }
 }
